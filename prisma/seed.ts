@@ -1,12 +1,13 @@
-import { PrismaClient, Role } from "@prisma/client";
+import { Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { DEFAULT_QUALITY_SPECS } from "../src/lib/default-quality-specs";
 import { DEFAULT_REJECT_CAUSES } from "../src/lib/default-reject-causes";
+import { createPrismaClient, describeTarget } from "../src/lib/db-client";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function main() {
-  console.log("🌱 Seed en cours…");
+  console.log(`🌱 Seed en cours… → ${describeTarget()}`);
 
   // ── Utilisateurs (un par rôle) ──────────────────────
   const pwd = await bcrypt.hash("Password123!", 12);

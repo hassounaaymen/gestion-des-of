@@ -35,6 +35,55 @@ Application : http://localhost:3000
 | gestion       | Responsable Gestion Production  |
 | consultation  | Consultation                    |
 
+## Déploiement sur Vercel
+
+Le système de fichiers de Vercel est en lecture seule et éphémère : SQLite
+local n'y fonctionne pas. L'application bascule donc sur **Turso** (libSQL)
+dès que `TURSO_DATABASE_URL` est présent — application et scripts suivent
+automatiquement.
+
+### Mise en place
+
+```bash
+# 1. Créer la base Turso, puis renseigner .env
+#    TURSO_DATABASE_URL / TURSO_AUTH_TOKEN
+
+# 2. Appliquer le schéma
+npm run db:push:turso
+
+# 3. Créer les comptes et les référentiels métier
+npm run db:seed
+
+# 4. Importer le référentiel ERP (depuis une machine du réseau interne)
+npm run erp:sync
+```
+
+`prisma db push` ne convient pas pour Turso : il lit l'URL du bloc
+`datasource` et ignore l'adaptateur configuré en code. `db:push:turso`
+génère donc le SQL via `prisma migrate diff` puis l'applique en lot libSQL.
+
+### Variables d'environnement Vercel
+
+| Variable | Valeur |
+| -------- | ------ |
+| `DATABASE_URL` | `file:./dev.db` — requis par Prisma pour générer le client |
+| `TURSO_DATABASE_URL` | `libsql://…turso.io` |
+| `TURSO_AUTH_TOKEN` | jeton Turso |
+| `JWT_SECRET` | **nouvelle** chaîne aléatoire (≠ celle du développement) |
+| `SESSION_TIMEOUT_MINUTES` | `60` |
+
+⚠️ **Ne pas mettre les variables `ERP_*` sur Vercel.** Le serveur NAV est sur
+le réseau interne : il est injoignable depuis le cloud. La synchronisation
+(`npm run erp:sync`) doit tourner sur une machine de l'entreprise, en tâche
+planifiée ; elle écrit directement dans la base Turso, que l'application lit.
+
+```
+   Réseau interne                        Cloud
+┌────────────────┐   erp:sync    ┌──────────────┐    ┌────────┐
+│  Dynamics NAV  │ ────────────▶ │  Turso (DB)  │ ◀──│ Vercel │
+└────────────────┘  (planifié)   └──────────────┘    └────────┘
+```
+
 ## Positionnement vis-à-vis de Dynamics NAV 2018
 
 Le module Production de NAV est puissant mais trop lourd pour le personnel

@@ -3,9 +3,8 @@
  *   npm run erp:sync
  */
 import { erpService, isErpConfigured } from "../src/services/erp.service";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../src/lib/prisma";
+import { describeTarget } from "../src/lib/db-client";
 
 async function main() {
   if (!isErpConfigured()) {
@@ -13,6 +12,7 @@ async function main() {
     process.exit(1);
   }
 
+  console.log(`🎯 Base cible : ${describeTarget()}`);
   console.log("🔌 Connexion à Business Central…");
   const ping = await erpService.ping();
   if (!ping.ok) {

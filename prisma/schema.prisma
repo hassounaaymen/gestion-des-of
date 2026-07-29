@@ -2,7 +2,9 @@
 // Schéma de base de données Prisma / SQLite
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // Requis pour l'adaptateur libSQL (Turso) utilisé en production
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
