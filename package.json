@@ -12,7 +12,9 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
     "db:push:turso": "tsx scripts/turso-push.ts",
-    "erp:sync": "tsx scripts/erp-sync.ts"
+    "erp:sync": "tsx scripts/erp-sync.ts",
+    "screenshots": "tsx scripts/screenshots.ts",
+    "presentation": "tsx scripts/presentation.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -61,6 +63,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "prisma": "^6.2.1",
+    "puppeteer-core": "^24.43.1",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

@@ -14,3 +14,4 @@ next-env.d.ts
 /prisma/dev.db-journal
 *.tsbuildinfo
 turso-test.db*
+presentation-gestion-of.pdf
