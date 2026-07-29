@@ -1,0 +1,442 @@
+// Gestion des Ordres de Fabrication — Béton Préfabriqué
+// Schéma de base de données Prisma / SQLite
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUTHENTIFICATION & RBAC
+// ─────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN //                Administrateur (technique)
+  DIRECTION //            Direction Générale — supervision Production + Qualité
+  PRODUCTION //           Responsable Production
+  QUALITY //              Responsable Qualité
+  PRODUCTION_MANAGER //   Responsable Gestion Production
+  VIEWER //               Consultation
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  email     String   @unique
+  password  String
+  fullName  String
+  role      Role     @default(VIEWER)
+  isActive  Boolean  @default(true)
+  lastLogin DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productionOrders ProductionOrder[] @relation("CreatedBy")
+  productionLines  ProductionLine[]  @relation("ProdEnteredBy")
+  qualityControls  QualityControl[]  @relation("QualityBy")
+  nonConformities  NonConformity[]   @relation("NcResponsible")
+  auditLogs        AuditLog[]
+  comments         Comment[]
+  notifications    Notification[]
+
+  @@index([role])
+}
+
+// ─────────────────────────────────────────────────────────────
+// DONNÉES ERP (lecture seule — synchronisées depuis Dynamics NAV/BC)
+// ─────────────────────────────────────────────────────────────
+
+model Article {
+  id          String   @id @default(cuid())
+  code        String   @unique // Code Article (BC: No)
+  designation String //          Désignation (BC: Description)
+  family      String? //         Famille (BC: Inventory_Posting_Group)
+  unit        String? //         Unité (BC: Base_Unit_of_Measure)
+  weight      Float? //          Poids
+  status      String? //         Statut
+
+  // Enrichissements dérivés du référentiel ERP
+  erpCategory    String? //  BC: Gen_Prod_Posting_Group (ex. PF-QUADRA)
+  productionLine String? //  Ligne/atelier déduit (ex. QUADRA, VIFESA, PRENSOLAND)
+  itemType       ItemType @default(AUTRE)
+  isManufactured Boolean  @default(false) // Fabricable => éligible à un OF
+
+  syncedAt DateTime @default(now())
+
+  productionOrders ProductionOrder[]
+  nonConformities  NonConformity[]
+
+  @@index([code])
+  @@index([designation])
+  @@index([isManufactured])
+  @@index([family])
+}
+
+/** Nature de l'article dans l'ERP */
+enum ItemType {
+  PRODUIT_FINI //     PF-*
+  SEMI_FINI //        SF-*
+  MATIERE_PREMIERE // MP
+  CONSOMMABLE //      CNS
+  PIECE_RECHANGE //   PDR
+  AUTRE
+}
+
+enum StoreType {
+  PRODUIT_FINI //     MAGPF-*
+  MATIERE_PREMIERE // MAGMP*/MGMP*
+  AUTRE
+}
+
+model Store {
+  id          String    @id @default(cuid())
+  code        String    @unique // Code Magasin (BC: Location_Code)
+  designation String //           Désignation Magasin
+  type        StoreType @default(AUTRE)
+  /** Unité de production rattachée (ex. « Unité 1 » pour MAGPF-U1) */
+  unite       String?
+  syncedAt    DateTime  @default(now())
+
+  productionOrders ProductionOrder[]
+
+  @@index([code])
+}
+
+/**
+ * Plan de contrôle qualité — tolérances par famille de produit.
+ * Permet le verdict automatique conforme / non conforme sur chaque mesure.
+ */
+/** Mode d'évaluation d'un point de contrôle */
+enum SpecMode {
+  TOLERANCE // ± écart autour de la cote nominale de l'article (dimensions)
+  RANGE //     min/max absolus (résistance, humidité, …)
+}
+
+model QualitySpec {
+  id         String   @id @default(cuid())
+  family     String //            Famille produit (ex. "DALOT", "PRODUIT VIBRE")
+  parameter  String //            Clé du paramètre (longueur, resistance, …)
+  label      String //            Libellé affiché
+  unit       String? //           Unité de mesure
+  mode       SpecMode @default(RANGE)
+  tolerance  Float? //            Écart admissible ± (mode TOLERANCE)
+  minValue   Float? //            Borne basse (mode RANGE)
+  maxValue   Float? //            Borne haute (mode RANGE)
+  isCritical Boolean  @default(false) // Hors tolérance => non-conformité bloquante
+  sortOrder  Int      @default(0)
+
+  @@unique([family, parameter])
+  @@index([family])
+}
+
+// ─────────────────────────────────────────────────────────────
+// ORDRE DE FABRICATION
+// ─────────────────────────────────────────────────────────────
+
+enum OrderStatus {
+  DRAFT //               Brouillon
+  IN_PRODUCTION //       En production
+  PRODUCTION_VALIDATED // Production validée (verrouillée)
+  QUALITY_VALIDATED //   Qualité validée
+  CLOSED //              Clôturé
+  CANCELLED //           Annulé
+}
+
+/** Priorité d'ordonnancement dans la file de l'atelier */
+enum Priorite {
+  BASSE
+  NORMALE
+  HAUTE
+  URGENTE
+}
+
+model ProductionOrder {
+  id          String      @id @default(cuid())
+  number      String      @unique // Numéro OF
+  date        DateTime    @default(now())
+  articleId   String
+  description String?
+  storeId     String
+  atelier     String? //             Atelier
+  equipe      String? //             Équipe
+  chefEquipe  String? //             Chef d'équipe
+  dateDebut   DateTime? //           Date début planifiée
+  dateFinPrev DateTime? //           Date fin prévue
+  status      OrderStatus @default(DRAFT)
+  observation String?
+
+  // ── Planification ────────────────────────────────
+  priorite    Priorite  @default(NORMALE)
+  /** Rang dans la file de l'atelier (à date de début égale) */
+  sequence    Int       @default(0)
+  plannedAt   DateTime? //           Date de la dernière planification
+  plannedBy   String? //             Auteur de la planification
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Horodatage / signature des validations
+  productionValidatedAt DateTime?
+  productionValidatedBy String?
+  qualityValidatedAt    DateTime?
+  qualityValidatedBy    String?
+  closedAt              DateTime?
+  closedBy              String?
+
+  article         Article          @relation(fields: [articleId], references: [id])
+  store           Store            @relation(fields: [storeId], references: [id])
+  createdBy       User             @relation("CreatedBy", fields: [createdById], references: [id])
+  productionLines ProductionLine[]
+  qualityControls QualityControl[]
+  nonConformities NonConformity[]
+  comments        Comment[]
+  attachments     Attachment[]
+
+  @@index([status])
+  @@index([articleId])
+  @@index([storeId])
+  @@index([date])
+}
+
+// Saisie Production — verrouillée après validation
+model ProductionLine {
+  id             String  @id @default(cuid())
+  orderId        String
+  qtePrevue      Float   @default(0) // Quantité prévue
+  qteProduite    Float   @default(0) // Quantité produite
+  qteBonne       Float   @default(0) // Quantité bonne
+  qteRebut       Float   @default(0) // Quantité rebut
+  causeRebut     String? //            Libellé de la cause de rebut
+  causeRebutCode String? //            Code référentiel (RejectCause)
+  causeRebutM5   String? //            Axe 5M de la cause (Ishikawa)
+  tempsMachine   Float? //             Temps machine (min)
+  tempsOperateur Float? //             Temps opérateur (min)
+  heureDebut     DateTime? //          Heure début
+  heureFin       DateTime? //          Heure fin
+  commentaires   String?
+  isLocked       Boolean @default(false)
+
+  enteredById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  order     ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  enteredBy User            @relation("ProdEnteredBy", fields: [enteredById], references: [id])
+
+  @@index([orderId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONTRÔLE QUALITÉ (indépendant de la Production)
+// ─────────────────────────────────────────────────────────────
+
+enum QualityDecision {
+  CONFORME //     Lot entièrement accepté
+  PARTIEL //      Lot accepté partiellement (tri : une part conforme, une part rebutée)
+  NON_CONFORME // Lot entièrement refusé
+  EN_ATTENTE
+}
+
+model QualityControl {
+  id           String          @id @default(cuid())
+  orderId      String
+  dateControle DateTime        @default(now())
+  heureControle DateTime?
+  controleur   String? //                    Contrôleur
+
+  // Validation quantitative — indépendante de la déclaration Production.
+  // Ex. Production déclare 20 dalots ; la Qualité en valide 15 conformes et 5 non conformes.
+  qteControlee   Float @default(0) // Quantité présentée au contrôle
+  qteConforme    Float @default(0) // Quantité acceptée
+  qteNonConforme Float @default(0) // Quantité refusée
+
+  longueur     Float? //                     Dimensions — Longueur
+  largeur      Float? //                     Largeur
+  hauteur      Float? //                     Hauteur
+  poids        Float? //                     Poids
+  resistance   Float? //                     Résistance
+  aspect       String? //                    Aspect
+  couleur      String? //                    Couleur
+  humidite     Float? //                     Humidité
+  commentaires String?
+  decision     QualityDecision @default(EN_ATTENTE)
+  isLocked     Boolean         @default(false)
+
+  enteredById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  order     ProductionOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  enteredBy User             @relation("QualityBy", fields: [enteredById], references: [id])
+  measures  QualityMeasure[]
+
+  @@index([orderId])
+  @@index([decision])
+}
+
+// Mesures qualité additionnelles (extensible)
+model QualityMeasure {
+  id        String @id @default(cuid())
+  controlId String
+  label     String
+  value     Float?
+  unit      String?
+  minSpec   Float?
+  maxSpec   Float?
+  isPass    Boolean?
+
+  control QualityControl @relation(fields: [controlId], references: [id], onDelete: Cascade)
+
+  @@index([controlId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// NON-CONFORMITÉS
+// ─────────────────────────────────────────────────────────────
+
+enum NcGravite {
+  MINEURE
+  MAJEURE
+  CRITIQUE
+}
+
+enum NcStatus {
+  OUVERTE
+  EN_COURS
+  RESOLUE
+  CLOTUREE
+}
+
+model NonConformity {
+  id               String    @id @default(cuid())
+  number           String    @unique // Numéro NC
+  orderId          String
+  articleId        String
+  nature           String? //           Nature
+  quantite         Float     @default(0) // Quantité concernée par la non-conformité
+  gravite          NcGravite @default(MINEURE)
+  cause            String? //           Cause
+  actionCorrective String? //           Action Corrective
+  responsableId    String?
+  date             DateTime  @default(now())
+  status           NcStatus  @default(OUVERTE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order       ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  article     Article         @relation(fields: [articleId], references: [id])
+  responsable User?           @relation("NcResponsible", fields: [responsableId], references: [id])
+
+  @@index([orderId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// PIÈCES JOINTES & COMMENTAIRES
+// ─────────────────────────────────────────────────────────────
+
+model Attachment {
+  id        String   @id @default(cuid())
+  orderId   String
+  fileName  String
+  fileUrl   String
+  fileSize  Int?
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  order ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  orderId   String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  order  ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  author User            @relation(fields: [authorId], references: [id])
+
+  @@index([orderId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// HISTORIQUE (audit trail immuable)
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String //   ex: CREATE, UPDATE, VALIDATE, CLOSE, LOGIN
+  entity     String //   ex: ProductionOrder
+  entityId   String?
+  before     String? //  JSON de l'état avant
+  after      String? //  JSON de l'état après
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// NOTIFICATIONS & PARAMÈTRES
+// ─────────────────────────────────────────────────────────────
+
+enum NotificationType {
+  NEW_ORDER
+  ORDER_COMPLETED
+  QUALITY_REQUESTED
+  ORDER_REJECTED
+  VALIDATION_DONE
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
+
+/**
+ * Référentiel des causes de rebut, classées selon les 5M (Ishikawa) :
+ * Main d'œuvre · Matière · Matériel · Méthode · Milieu.
+ * Liste fermée => Pareto des défauts exploitable et analyse de cause racine.
+ */
+model RejectCause {
+  id        String  @id @default(cuid())
+  code      String  @unique
+  label     String
+  category  String //  Axe 5M
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  @@index([isActive])
+  @@index([category])
+}
