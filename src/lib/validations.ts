@@ -14,6 +14,42 @@ export const loginSchema = z.object({
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
+// ── Comptes utilisateurs ──────────────────────────────
+const ROLES = [
+  "SUPER_ADMIN", "DIRECTION", "DIRECTEUR_USINE",
+  "PRODUCTION", "QUALITY", "PRODUCTION_MANAGER", "VIEWER",
+] as const;
+
+const motDePasse = z
+  .string()
+  .min(8, "8 caractères minimum")
+  .regex(/[A-Za-z]/, "Doit contenir une lettre")
+  .regex(/[0-9]/, "Doit contenir un chiffre");
+
+export const userCreateSchema = z.object({
+  username: z
+    .string()
+    .min(3, "3 caractères minimum")
+    .regex(/^[a-zA-Z0-9._-]+$/, "Lettres, chiffres, point, tiret et souligné uniquement"),
+  email: z.string().email("Adresse e-mail invalide"),
+  fullName: z.string().min(2, "Nom complet requis"),
+  role: z.enum(ROLES),
+  usine: optionalString,
+  password: motDePasse,
+});
+export type UserCreateInput = z.infer<typeof userCreateSchema>;
+
+export const userUpdateSchema = z.object({
+  email: z.string().email("Adresse e-mail invalide").optional(),
+  fullName: z.string().min(2).optional(),
+  role: z.enum(ROLES).optional(),
+  usine: optionalString,
+  isActive: z.boolean().optional(),
+  /** Renseigné uniquement lors d'une réinitialisation */
+  password: motDePasse.optional(),
+});
+export type UserUpdateInput = z.infer<typeof userUpdateSchema>;
+
 // ── Ordre de fabrication ──────────────────────────────
 export const orderCreateSchema = z
   .object({

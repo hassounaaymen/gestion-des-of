@@ -5,12 +5,21 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ORDER_STATUS, QUALITY_DECISION } from "@/lib/status";
 import { formatDate } from "@/lib/utils";
+import { getSession } from "@/lib/session";
+import { scopeUsine } from "@/lib/rbac";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function QualityPage() {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  const usine = scopeUsine(session);
   const orders = await prisma.productionOrder.findMany({
-    where: { status: { in: ["PRODUCTION_VALIDATED", "QUALITY_VALIDATED"] } },
+    where: {
+      status: { in: ["PRODUCTION_VALIDATED", "QUALITY_VALIDATED"] },
+      ...(usine ? { store: { unite: usine } } : {}),
+    },
     include: { article: true, qualityControls: true },
     orderBy: { productionValidatedAt: "desc" },
   });

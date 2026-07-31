@@ -23,6 +23,20 @@ async function nextOrderNumber(): Promise<string> {
   return `${prefix}${String(seq).padStart(4, "0")}`;
 }
 
+/**
+ * Vérifie qu'un ordre appartient bien au périmètre de l'appelant.
+ * On répond 404 plutôt que 403 : un utilisateur ne doit pas pouvoir déduire
+ * l'existence d'un ordre appartenant à une autre usine.
+ */
+async function assertScope(orderId: string, usine?: string | null) {
+  if (!usine) return;
+  const ok = await prisma.productionOrder.findFirst({
+    where: { id: orderId, store: { unite: usine } },
+    select: { id: true },
+  });
+  if (!ok) throw new ApiError(404, "OF introuvable");
+}
+
 async function notifyRole(role: Role, type: NotificationType, title: string, message: string, link?: string) {
   const users = await prisma.user.findMany({ where: { role, isActive: true }, select: { id: true } });
   if (users.length === 0) return;
@@ -32,10 +46,12 @@ async function notifyRole(role: Role, type: NotificationType, title: string, mes
 }
 
 export const orderService = {
-  list(filters?: { status?: OrderStatus; q?: string }) {
+  list(filters?: { status?: OrderStatus; q?: string; usine?: string | null }) {
     return prisma.productionOrder.findMany({
       where: {
         status: filters?.status,
+        // Cloisonnement par usine : appliqué dans la requête, pas à l'affichage
+        ...(filters?.usine ? { store: { unite: filters.usine } } : {}),
         ...(filters?.q
           ? {
               OR: [
@@ -57,9 +73,10 @@ export const orderService = {
     });
   },
 
-  get(id: string) {
-    return prisma.productionOrder.findUnique({
-      where: { id },
+  /** Renvoie `null` si l'ordre existe mais appartient à une autre usine. */
+  get(id: string, usine?: string | null) {
+    return prisma.productionOrder.findFirst({
+      where: { id, ...(usine ? { store: { unite: usine } } : {}) },
       include: {
         article: true,
         store: true,
@@ -72,7 +89,22 @@ export const orderService = {
     });
   },
 
-  async create(input: OrderCreateInput, userId: string, fullName?: string) {
+  async create(
+    input: OrderCreateInput,
+    userId: string,
+    fullName?: string,
+    usine?: string | null,
+  ) {
+    // Un utilisateur rattaché à une usine ne peut produire que pour son site
+    if (usine) {
+      const store = await prisma.store.findFirst({
+        where: { id: input.storeId, unite: usine },
+        select: { id: true },
+      });
+      if (!store) {
+        throw new ApiError(403, `Magasin hors de votre périmètre (${usine})`);
+      }
+    }
     const number = await nextOrderNumber();
     // Un OF créé depuis le planning arrive déjà daté : il est donc planifié d'emblée.
     const planned = Boolean(input.dateDebut && input.dateFinPrev);
@@ -107,7 +139,8 @@ export const orderService = {
    * Planifie (ou replanifie) un OF : dates, affectation atelier/équipe, priorité.
    * Sans effet sur les données de production déjà saisies.
    */
-  async plan(orderId: string, input: PlanningInput, userId: string, fullName: string) {
+  async plan(orderId: string, input: PlanningInput, userId: string, fullName: string, usine?: string | null) {
+    await assertScope(orderId, usine);
     const order = await prisma.productionOrder.findUnique({ where: { id: orderId } });
     if (!order) throw new ApiError(404, "OF introuvable");
     if (order.status === OrderStatus.CLOSED || order.status === OrderStatus.CANCELLED) {
@@ -155,7 +188,8 @@ export const orderService = {
   },
 
   /** Saisie production — refusée si l'OF est verrouillé. */
-  async saveProduction(orderId: string, input: ProductionInput, userId: string) {
+  async saveProduction(orderId: string, input: ProductionInput, userId: string, usine?: string | null) {
+    await assertScope(orderId, usine);
     const order = await prisma.productionOrder.findUnique({
       where: { id: orderId },
       include: { productionLines: true },
@@ -188,7 +222,8 @@ export const orderService = {
   },
 
   /** Valide la production: verrouille définitivement les lignes et notifie la Qualité. */
-  async validateProduction(orderId: string, userId: string, fullName: string) {
+  async validateProduction(orderId: string, userId: string, fullName: string, usine?: string | null) {
+    await assertScope(orderId, usine);
     const order = await prisma.productionOrder.findUnique({ where: { id: orderId } });
     if (!order) throw new ApiError(404, "OF introuvable");
     if (order.status !== OrderStatus.IN_PRODUCTION) {
@@ -211,7 +246,8 @@ export const orderService = {
   },
 
   /** Saisie/mise à jour du contrôle qualité (indépendant de la production). */
-  async saveQuality(orderId: string, input: QualityInput, userId: string) {
+  async saveQuality(orderId: string, input: QualityInput, userId: string, usine?: string | null) {
+    await assertScope(orderId, usine);
     const order = await prisma.productionOrder.findUnique({ where: { id: orderId } });
     if (!order) throw new ApiError(404, "OF introuvable");
     if (order.status === OrderStatus.IN_PRODUCTION || order.status === OrderStatus.DRAFT) {
@@ -309,7 +345,8 @@ export const orderService = {
     return nc;
   },
 
-  async validateQuality(orderId: string, userId: string, fullName: string) {
+  async validateQuality(orderId: string, userId: string, fullName: string, usine?: string | null) {
+    await assertScope(orderId, usine);
     const order = await prisma.productionOrder.findUnique({ where: { id: orderId }, include: { qualityControls: true } });
     if (!order) throw new ApiError(404, "OF introuvable");
     if (order.status !== OrderStatus.PRODUCTION_VALIDATED) {
@@ -336,7 +373,8 @@ export const orderService = {
     return updated;
   },
 
-  async close(orderId: string, userId: string, fullName: string) {
+  async close(orderId: string, userId: string, fullName: string, usine?: string | null) {
+    await assertScope(orderId, usine);
     const order = await prisma.productionOrder.findUnique({ where: { id: orderId } });
     if (!order) throw new ApiError(404, "OF introuvable");
     if (order.status !== OrderStatus.QUALITY_VALIDATED) {

@@ -7,7 +7,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const session = await requirePermission("quality:write");
     const { id } = await params;
     const input = qualitySchema.parse(await req.json());
-    const control = await orderService.saveQuality(id, input, session.sub);
+    const control = await orderService.saveQuality(id, input, session.sub, session.usine);
     return ok(control);
   });
 }

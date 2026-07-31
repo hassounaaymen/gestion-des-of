@@ -7,7 +7,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const session = await requirePermission("production:write");
     const { id } = await params;
     const input = productionSchema.parse(await req.json());
-    const line = await orderService.saveProduction(id, input, session.sub);
+    const line = await orderService.saveProduction(id, input, session.sub, session.usine);
     return ok(line);
   });
 }

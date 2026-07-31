@@ -5,7 +5,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   return handle(async () => {
     const session = await requirePermission("order:validateProduction");
     const { id } = await params;
-    const order = await orderService.validateProduction(id, session.sub, session.fullName);
+    const order = await orderService.validateProduction(id, session.sub, session.fullName, session.usine);
     return ok(order);
   });
 }

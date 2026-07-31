@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { CalendarClock, AlertTriangle, ChevronLeft, ChevronRight, FileText } from "lucide-react";
 import { getPlanning } from "@/services/planning.service";
 import { getSession } from "@/lib/session";
-import { can } from "@/lib/rbac";
+import { can, scopeUsine } from "@/lib/rbac";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -65,11 +65,16 @@ export default async function PlanningPage({
   start.setHours(0, 0, 0, 0);
   if (!explicitFrom) start.setDate(start.getDate() + offset * horizon);
 
+  // Un utilisateur rattaché à une usine ne peut pas élargir son périmètre
+  // via l'URL : sa portée écrase toujours le filtre demandé.
+  const portee = scopeUsine(session);
+  const usineFiltre = portee ?? sp.usine ?? null;
+
   const data = await getPlanning({
     from: start,
     to: explicitTo ?? undefined,
     days: explicitTo ? undefined : horizon,
-    usine: sp.usine ?? null,
+    usine: usineFiltre,
   });
 
   const isoDay = (d: Date) => d.toISOString().slice(0, 10);
@@ -157,7 +162,7 @@ export default async function PlanningPage({
         from={isoDay(data.from)}
         to={isoDay(data.to)}
         usine={data.usine}
-        unites={data.knownUnites}
+        unites={portee ? [] : data.knownUnites}
       />
 
       {data.ateliers.length === 0 ? (

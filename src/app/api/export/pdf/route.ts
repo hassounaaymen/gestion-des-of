@@ -5,6 +5,7 @@ import {
   buildSynthesisPdf,
 } from "@/services/export-pdf.service";
 import { writeAudit, requestMeta } from "@/lib/audit";
+import { scopeUsine } from "@/lib/rbac";
 
 export const maxDuration = 120;
 
@@ -21,7 +22,7 @@ export async function GET(req: Request) {
     if (type === "order") {
       const id = sp.get("id");
       if (!id) throw new ApiError(400, "Paramètre `id` requis pour la fiche d'OF");
-      buffer = await buildOrderPdf(id);
+      buffer = await buildOrderPdf(id, scopeUsine(session));
       filename = `fiche-of-${id.slice(0, 8)}-${stamp}.pdf`;
     } else if (type === "planning") {
       // Mêmes filtres que l'écran : fenêtre de dates (ou périodes) et usine
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
       const offset = Number(sp.get("offset") ?? 0) || 0;
       const rawFrom = sp.get("from");
       const rawTo = sp.get("to");
-      const usine = sp.get("usine");
+      const usine = scopeUsine(session) ?? sp.get("usine");
 
       const from = rawFrom ? new Date(`${rawFrom}T00:00:00`) : new Date();
       from.setHours(0, 0, 0, 0);
@@ -44,7 +45,7 @@ export async function GET(req: Request) {
       const suffix = usine ? `-${usine.replace(/\s+/g, "").toLowerCase()}` : "";
       filename = `planning-production${suffix}-${stamp}.pdf`;
     } else if (type === "synthesis") {
-      buffer = await buildSynthesisPdf();
+      buffer = await buildSynthesisPdf(scopeUsine(session));
       filename = `rapport-synthese-${stamp}.pdf`;
     } else {
       throw new ApiError(400, `Type d'export inconnu : ${type}`);

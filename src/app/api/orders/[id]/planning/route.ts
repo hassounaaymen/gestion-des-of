@@ -8,7 +8,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const session = await requirePermission("planning:write");
     const { id } = await params;
     const input = planningSchema.parse(await req.json());
-    const order = await orderService.plan(id, input, session.sub, session.fullName);
+    const order = await orderService.plan(id, input, session.sub, session.fullName, session.usine);
     return ok(order);
   });
 }

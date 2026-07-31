@@ -49,12 +49,13 @@ function finalize(ws: ExcelJS.Worksheet, headerRowNumber: number, span: number) 
 }
 
 /** Classeur « Ordres de fabrication » avec détail production et qualité. */
-export async function buildOrdersWorkbook(): Promise<ExcelJS.Buffer> {
+export async function buildOrdersWorkbook(usine?: string | null): Promise<ExcelJS.Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Gestion des OF";
   wb.created = new Date();
 
   const orders = await prisma.productionOrder.findMany({
+    where: usine ? { store: { unite: usine } } : {},
     include: {
       article: true, store: true,
       productionLines: true, qualityControls: true,
@@ -175,10 +176,10 @@ export async function buildOrdersWorkbook(): Promise<ExcelJS.Buffer> {
 }
 
 /** Classeur « Écarts Production / Qualité » pour la Direction. */
-export async function buildEcartsWorkbook(): Promise<ExcelJS.Buffer> {
+export async function buildEcartsWorkbook(usine?: string | null): Promise<ExcelJS.Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Gestion des OF";
-  const data = await getEcarts();
+  const data = await getEcarts({ usine });
 
   const ws = wb.addWorksheet("Écarts Prod-Qualité", {
     pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1 },
@@ -245,9 +246,10 @@ export async function buildEcartsWorkbook(): Promise<ExcelJS.Buffer> {
 }
 
 /** Classeur « Non-conformités ». */
-export async function buildNcWorkbook(): Promise<ExcelJS.Buffer> {
+export async function buildNcWorkbook(usine?: string | null): Promise<ExcelJS.Buffer> {
   const wb = new ExcelJS.Workbook();
   const list = await prisma.nonConformity.findMany({
+    where: usine ? { order: { store: { unite: usine } } } : {},
     include: { order: true, article: true, responsable: { select: { fullName: true } } },
     orderBy: { date: "desc" },
   });

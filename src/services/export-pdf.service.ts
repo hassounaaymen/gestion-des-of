@@ -200,9 +200,9 @@ function table(
 }
 
 /** Fiche complète d'un ordre de fabrication. */
-export async function buildOrderPdf(orderId: string): Promise<Buffer> {
-  const order = await prisma.productionOrder.findUnique({
-    where: { id: orderId },
+export async function buildOrderPdf(orderId: string, usine?: string | null): Promise<Buffer> {
+  const order = await prisma.productionOrder.findFirst({
+    where: { id: orderId, ...(usine ? { store: { unite: usine } } : {}) },
     include: {
       article: true, store: true,
       productionLines: { include: { enteredBy: { select: { fullName: true } } } },
@@ -553,8 +553,11 @@ export async function buildPlanningPdf(options?: {
 }
 
 /** Rapport de synthèse Direction : KPI, performance, écarts. */
-export async function buildSynthesisPdf(): Promise<Buffer> {
-  const [data, ecarts] = await Promise.all([getDashboardData(), getEcarts({ onlyWithEcart: true })]);
+export async function buildSynthesisPdf(usine?: string | null): Promise<Buffer> {
+  const [data, ecarts] = await Promise.all([
+    getDashboardData(usine),
+    getEcarts({ onlyWithEcart: true, usine }),
+  ]);
 
   return render((doc) => {
     header(doc, "Rapport de synthèse", "Direction Générale");

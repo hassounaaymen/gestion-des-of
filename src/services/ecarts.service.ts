@@ -36,9 +36,14 @@ export interface EcartsSummary {
 
 export async function getEcarts(options?: {
   onlyWithEcart?: boolean;
+  /** Restreint au périmètre d'une usine */
+  usine?: string | null;
 }): Promise<EcartsSummary> {
   const orders = await prisma.productionOrder.findMany({
-    where: { qualityControls: { some: {} } },
+    where: {
+      qualityControls: { some: {} },
+      ...(options?.usine ? { store: { unite: options.usine } } : {}),
+    },
     include: { article: true, productionLines: true, qualityControls: true },
     orderBy: { date: "desc" },
   });

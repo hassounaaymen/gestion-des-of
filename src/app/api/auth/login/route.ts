@@ -30,6 +30,7 @@ export async function POST(req: Request) {
       username: user.username,
       fullName: user.fullName,
       role: user.role,
+      usine: user.usine,
     });
 
     await prisma.user.update({

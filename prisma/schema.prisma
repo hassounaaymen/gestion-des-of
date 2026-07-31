@@ -17,8 +17,9 @@ datasource db {
 // ─────────────────────────────────────────────────────────────
 
 enum Role {
-  ADMIN //                Administrateur (technique)
-  DIRECTION //            Direction Générale — supervision Production + Qualité
+  SUPER_ADMIN //          Informatique — toutes usines, administration technique
+  DIRECTION //            Direction Générale — toutes usines, supervision
+  DIRECTEUR_USINE //      Directeur d'usine — administre sa seule usine
   PRODUCTION //           Responsable Production
   QUALITY //              Responsable Qualité
   PRODUCTION_MANAGER //   Responsable Gestion Production
@@ -32,6 +33,12 @@ model User {
   password  String
   fullName  String
   role      Role     @default(VIEWER)
+  /**
+   * Usine de rattachement (ex. « QUADRA »). L'utilisateur ne voit que les
+   * ordres de son usine. `null` = accès à toutes les usines : réservé à
+   * l'informatique et à la Direction Générale.
+   */
+  usine     String?
   isActive  Boolean  @default(true)
   lastLogin DateTime?
   createdAt DateTime @default(now())
@@ -46,6 +53,7 @@ model User {
   notifications    Notification[]
 
   @@index([role])
+  @@index([usine])
 }
 
 // ─────────────────────────────────────────────────────────────

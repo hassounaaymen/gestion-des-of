@@ -69,7 +69,10 @@ function aggregateBy(
     .sort((a, b) => b.produite - a.produite);
 }
 
-export async function getDashboardData(): Promise<DashboardData> {
+export async function getDashboardData(usine?: string | null): Promise<DashboardData> {
+  // Cloisonnement : un utilisateur d'usine ne voit que ses propres ordres
+  const scopeOrder = usine ? { store: { unite: usine } } : {};
+  const scopeLine = usine ? { order: { store: { unite: usine } } } : {};
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
@@ -86,21 +89,23 @@ export async function getDashboardData(): Promise<DashboardData> {
     storeCount,
     lastSynced,
   ] = await Promise.all([
-    prisma.productionOrder.count({ where: { status: OrderStatus.IN_PRODUCTION } }),
-    prisma.productionOrder.count({ where: { status: OrderStatus.CLOSED } }),
+    prisma.productionOrder.count({ where: { ...scopeOrder, status: OrderStatus.IN_PRODUCTION } }),
+    prisma.productionOrder.count({ where: { ...scopeOrder, status: OrderStatus.CLOSED } }),
     prisma.productionLine.findMany({
+      where: scopeLine,
       select: {
         qteBonne: true, qteRebut: true, qteProduite: true,
         causeRebut: true, causeRebutM5: true,
       },
     }),
     prisma.productionLine.findMany({
-      where: { updatedAt: { gte: startOfDay } },
+      where: { ...scopeLine, updatedAt: { gte: startOfDay } },
       select: { qteProduite: true },
     }),
-    prisma.nonConformity.count({ where: { status: { not: "CLOTUREE" } } }),
-    prisma.qualityControl.groupBy({ by: ["decision"], _count: true }),
+    prisma.nonConformity.count({ where: { status: { not: "CLOTUREE" }, ...(usine ? { order: { store: { unite: usine } } } : {}) } }),
+    prisma.qualityControl.groupBy({ by: ["decision"], _count: true, where: usine ? { order: { store: { unite: usine } } } : {} }),
     prisma.productionOrder.findMany({
+      where: scopeOrder,
       include: { article: true, productionLines: true },
     }),
     prisma.article.count(),
@@ -189,7 +194,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   }));
 
   // Écarts Production / Qualité
-  const ecartsData = await getEcarts({ onlyWithEcart: true });
+  const ecartsData = await getEcarts({ onlyWithEcart: true, usine });
 
   return {
     kpis: {

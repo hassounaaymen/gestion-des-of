@@ -5,12 +5,21 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ORDER_STATUS } from "@/lib/status";
 import { formatNumber } from "@/lib/utils";
+import { getSession } from "@/lib/session";
+import { scopeUsine } from "@/lib/rbac";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProductionPage() {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  const usine = scopeUsine(session);
   const orders = await prisma.productionOrder.findMany({
-    where: { status: { in: ["DRAFT", "IN_PRODUCTION"] } },
+    where: {
+      status: { in: ["DRAFT", "IN_PRODUCTION"] },
+      ...(usine ? { store: { unite: usine } } : {}),
+    },
     include: { article: true, productionLines: true },
     orderBy: { createdAt: "desc" },
   });

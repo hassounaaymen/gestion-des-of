@@ -11,11 +11,16 @@ import {
 import { PerformanceTable } from "@/components/dashboard/performance-table";
 import { formatNumber, formatDateTime } from "@/lib/utils";
 import { Database } from "lucide-react";
+import { getSession } from "@/lib/session";
+import { scopeUsine } from "@/lib/rbac";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const data = await getDashboardData();
+  const session = await getSession();
+  if (!session) redirect("/login");
+  const data = await getDashboardData(scopeUsine(session));
   const k = data.kpis;
 
   return (

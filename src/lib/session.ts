@@ -13,6 +13,8 @@ export interface SessionPayload {
   username: string;
   fullName: string;
   role: Role;
+  /** Usine de rattachement ; `null` pour les rôles à portée globale. */
+  usine: string | null;
   [key: string]: unknown;
 }
 

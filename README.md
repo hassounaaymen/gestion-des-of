@@ -26,14 +26,42 @@ Application : http://localhost:3000
 
 ### Comptes (mot de passe : `Password123!`)
 
-| Identifiant   | Rôle                            |
-| ------------- | ------------------------------- |
-| admin         | Administrateur (technique)      |
-| direction     | Direction Générale              |
-| production    | Responsable Production          |
-| qualite       | Responsable Qualité             |
-| gestion       | Responsable Gestion Production  |
-| consultation  | Consultation                    |
+| Identifiant   | Rôle                           | Usine  |
+| ------------- | ------------------------------ | ------ |
+| admin         | Administrateur système (IT)    | toutes |
+| direction     | Direction Générale             | toutes |
+| dir.quadra    | Directeur d'usine              | QUADRA |
+| dir.vifesa    | Directeur d'usine              | VIFESA |
+| production    | Responsable Production         | QUADRA |
+| qualite       | Responsable Qualité            | QUADRA |
+| gestion       | Responsable Gestion Production | QUADRA |
+| prod.vifesa   | Responsable Production         | VIFESA |
+| qual.vifesa   | Responsable Qualité            | VIFESA |
+| consultation  | Consultation                   | QUADRA |
+
+## Cloisonnement par usine
+
+Chaque compte est rattaché à une usine et **ne voit que les ordres de son
+site**. L'usine d'un ordre est celle de son magasin de destination
+(`store.unite`). Seuls l'administrateur système et la Direction Générale
+ont une portée globale (`usine = null`).
+
+Le filtre est appliqué **dans les requêtes**, jamais à l'affichage : ordres,
+planning, écarts, non-conformités, tableau de bord et **exports** sont tous
+restreints. Une tentative d'accès direct à un ordre d'une autre usine renvoie
+`404` — et non `403`, pour ne pas révéler son existence.
+
+### Trois niveaux d'administration
+
+| Niveau | Permission | Portée |
+| ------ | ---------- | ------ |
+| **Administrateur système** (informatique) | `user:manageAll` | Tous les comptes, tous les rôles, toutes les usines |
+| **Directeur d'usine** | `user:manage` | Les comptes de **son** usine, rôles opérationnels uniquement |
+| Autres rôles | — | Aucun accès à la gestion des comptes |
+
+Un directeur d'usine ne peut ni créer un compte à portée globale, ni rattacher
+un compte à une autre usine (refus explicite en `403`), ni modifier son propre
+rôle, ni désactiver son propre compte.
 
 ## Déploiement sur Vercel
 
