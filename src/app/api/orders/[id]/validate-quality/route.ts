@@ -1,3 +1,4 @@
+import { scopeUsines } from "@/lib/rbac";
 import { orderService } from "@/services/order.service";
 import { handle, ok, requirePermission } from "@/lib/api";
 
@@ -5,7 +6,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   return handle(async () => {
     const session = await requirePermission("order:validateQuality");
     const { id } = await params;
-    const order = await orderService.validateQuality(id, session.sub, session.fullName, session.usine);
+    const order = await orderService.validateQuality(id, session.sub, session.fullName, scopeUsines(session));
     return ok(order);
   });
 }

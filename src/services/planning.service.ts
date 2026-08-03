@@ -58,8 +58,8 @@ export interface PlanningData {
   from: Date;
   to: Date;
   totalOrders: number;
-  /** Filtre usine appliqué, le cas échéant */
-  usine: string | null;
+  /** Périmètre usine appliqué ; `null` = toutes les usines */
+  usines: string[] | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -76,8 +76,8 @@ export async function getPlanning(options?: {
   /** Fin d'horizon explicite ; prioritaire sur `days` */
   to?: Date;
   days?: number;
-  /** Filtre sur l'unité de production (usine) rattachée au magasin */
-  usine?: string | null;
+  /** Filtre sur les unités de production (usines) rattachées au magasin */
+  usines?: string[] | null;
 }): Promise<PlanningData> {
   const from = startOfDay(options?.from ?? new Date());
   const horizon = options?.to
@@ -90,7 +90,7 @@ export async function getPlanning(options?: {
       )
     : (options?.days ?? 14);
   const to = new Date(from.getTime() + (horizon - 1) * DAY_MS);
-  const usine = options?.usine?.trim() || null;
+  const usines = options?.usines?.length ? options.usines : null;
   const today = startOfDay(new Date()).getTime();
 
   const days = Array.from({ length: horizon }, (_, i) => {
@@ -109,7 +109,7 @@ export async function getPlanning(options?: {
   const orders = await prisma.productionOrder.findMany({
     where: {
       status: { notIn: ["CLOSED", "CANCELLED"] },
-      ...(usine ? { store: { unite: usine } } : {}),
+      ...(usines ? { store: { unite: { in: usines } } } : {}),
     },
     include: { article: true, productionLines: true },
     orderBy: [{ dateDebut: "asc" }, { createdAt: "asc" }],
@@ -219,7 +219,7 @@ export async function getPlanning(options?: {
     knownUnites: unites.map((u) => u.unite!).filter(Boolean),
     from,
     to,
-    usine,
+    usines,
     totalOrders: ateliers.reduce((s, a) => s + a.orders.length, 0) + unplanned.length,
   };
 }

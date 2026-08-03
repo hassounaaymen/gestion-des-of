@@ -18,6 +18,15 @@ export const M5_CATEGORIES = [
 
 export type M5Category = (typeof M5_CATEGORIES)[number];
 
+/**
+ * Axe d'accueil des causes saisies en clair via l'option « Autre ».
+ *
+ * Elles rejoignent le référentiel pour rester comptabilisables, mais dans une
+ * catégorie distincte des 5M : un atelier qui alimente beaucoup cet axe
+ * signale que le référentiel Ishikawa mérite d'être complété.
+ */
+export const AUTRE_CATEGORY = "Autre";
+
 export interface RejectCauseSeed {
   code: string;
   label: string;

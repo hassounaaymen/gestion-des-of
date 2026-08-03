@@ -5,7 +5,7 @@ import {
   buildNcWorkbook,
 } from "@/services/export-excel.service";
 import { writeAudit, requestMeta } from "@/lib/audit";
-import { scopeUsine } from "@/lib/rbac";
+import { scopeUsines } from "@/lib/rbac";
 
 export const maxDuration = 120;
 
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     const builder = BUILDERS[type as keyof typeof BUILDERS];
     if (!builder) throw new ApiError(400, `Type d'export inconnu : ${type}`);
 
-    const buffer = await builder.build(scopeUsine(session));
+    const buffer = await builder.build(scopeUsines(session));
     const stamp = new Date().toISOString().slice(0, 10);
 
     await writeAudit({

@@ -49,13 +49,13 @@ function finalize(ws: ExcelJS.Worksheet, headerRowNumber: number, span: number) 
 }
 
 /** Classeur « Ordres de fabrication » avec détail production et qualité. */
-export async function buildOrdersWorkbook(usine?: string | null): Promise<ExcelJS.Buffer> {
+export async function buildOrdersWorkbook(usines?: string[] | null): Promise<ExcelJS.Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Gestion des OF";
   wb.created = new Date();
 
   const orders = await prisma.productionOrder.findMany({
-    where: usine ? { store: { unite: usine } } : {},
+    where: usines ? { store: { unite: { in: usines } } } : {},
     include: {
       article: true, store: true,
       productionLines: true, qualityControls: true,
@@ -176,10 +176,10 @@ export async function buildOrdersWorkbook(usine?: string | null): Promise<ExcelJ
 }
 
 /** Classeur « Écarts Production / Qualité » pour la Direction. */
-export async function buildEcartsWorkbook(usine?: string | null): Promise<ExcelJS.Buffer> {
+export async function buildEcartsWorkbook(usines?: string[] | null): Promise<ExcelJS.Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Gestion des OF";
-  const data = await getEcarts({ usine });
+  const data = await getEcarts({ usines });
 
   const ws = wb.addWorksheet("Écarts Prod-Qualité", {
     pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1 },
@@ -246,10 +246,10 @@ export async function buildEcartsWorkbook(usine?: string | null): Promise<ExcelJ
 }
 
 /** Classeur « Non-conformités ». */
-export async function buildNcWorkbook(usine?: string | null): Promise<ExcelJS.Buffer> {
+export async function buildNcWorkbook(usines?: string[] | null): Promise<ExcelJS.Buffer> {
   const wb = new ExcelJS.Workbook();
   const list = await prisma.nonConformity.findMany({
-    where: usine ? { order: { store: { unite: usine } } } : {},
+    where: usines ? { order: { store: { unite: { in: usines } } } } : {},
     include: { order: true, article: true, responsable: { select: { fullName: true } } },
     orderBy: { date: "desc" },
   });

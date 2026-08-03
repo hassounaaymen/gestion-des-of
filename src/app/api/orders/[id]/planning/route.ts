@@ -1,3 +1,4 @@
+import { scopeUsines } from "@/lib/rbac";
 import { orderService } from "@/services/order.service";
 import { planningSchema } from "@/lib/validations";
 import { handle, ok, requirePermission } from "@/lib/api";
@@ -8,7 +9,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const session = await requirePermission("planning:write");
     const { id } = await params;
     const input = planningSchema.parse(await req.json());
-    const order = await orderService.plan(id, input, session.sub, session.fullName, session.usine);
+    const order = await orderService.plan(id, input, session.sub, session.fullName, scopeUsines(session));
     return ok(order);
   });
 }

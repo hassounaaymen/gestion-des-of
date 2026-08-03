@@ -1,7 +1,7 @@
 import { orderService } from "@/services/order.service";
 import { orderCreateSchema } from "@/lib/validations";
 import { handle, ok, requirePermission } from "@/lib/api";
-import { scopeUsine } from "@/lib/rbac";
+import { scopeUsines } from "@/lib/rbac";
 import type { OrderStatus } from "@prisma/client";
 
 export async function GET(req: Request) {
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     const orders = await orderService.list({
       status: status ?? undefined,
       q,
-      usine: scopeUsine(session),
+      usines: scopeUsines(session),
     });
     return ok(orders);
   });
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       input,
       session.sub,
       session.fullName,
-      scopeUsine(session),
+      scopeUsines(session),
     );
     return ok(order, 201);
   });

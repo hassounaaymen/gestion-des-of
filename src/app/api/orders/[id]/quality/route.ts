@@ -1,3 +1,4 @@
+import { scopeUsines } from "@/lib/rbac";
 import { orderService } from "@/services/order.service";
 import { qualitySchema } from "@/lib/validations";
 import { handle, ok, requirePermission } from "@/lib/api";
@@ -7,7 +8,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const session = await requirePermission("quality:write");
     const { id } = await params;
     const input = qualitySchema.parse(await req.json());
-    const control = await orderService.saveQuality(id, input, session.sub, session.usine);
+    const control = await orderService.saveQuality(id, input, session.sub, scopeUsines(session));
     return ok(control);
   });
 }

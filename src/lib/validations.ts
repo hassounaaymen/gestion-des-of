@@ -26,6 +26,18 @@ const motDePasse = z
   .regex(/[A-Za-z]/, "Doit contenir une lettre")
   .regex(/[0-9]/, "Doit contenir un chiffre");
 
+/**
+ * Rattachement aux usines. `null` vaut explicitement « toutes les usines » :
+ * c'est le choix de l'option correspondante dans le formulaire, distinct de
+ * « aucune sélection » (liste vide), qui est refusé.
+ */
+const usines = z
+  .array(z.string().trim().min(1))
+  .nullable()
+  .refine((v) => v === null || v.length > 0, {
+    message: "Sélectionnez au moins une usine, ou « Toutes les usines »",
+  });
+
 export const userCreateSchema = z.object({
   username: z
     .string()
@@ -34,7 +46,7 @@ export const userCreateSchema = z.object({
   email: z.string().email("Adresse e-mail invalide"),
   fullName: z.string().min(2, "Nom complet requis"),
   role: z.enum(ROLES),
-  usine: optionalString,
+  usines,
   password: motDePasse,
 });
 export type UserCreateInput = z.infer<typeof userCreateSchema>;
@@ -43,7 +55,8 @@ export const userUpdateSchema = z.object({
   email: z.string().email("Adresse e-mail invalide").optional(),
   fullName: z.string().min(2).optional(),
   role: z.enum(ROLES).optional(),
-  usine: optionalString,
+  /** Absent = rattachement inchangé ; `null` = toutes les usines */
+  usines: usines.optional(),
   isActive: z.boolean().optional(),
   /** Renseigné uniquement lors d'une réinitialisation */
   password: motDePasse.optional(),
@@ -165,6 +178,16 @@ export const qualitySchema = z
     },
   );
 export type QualityInput = z.infer<typeof qualitySchema>;
+
+// ── Cause de rebut saisie en clair (option « Autre ») ──
+export const rejectCauseCreateSchema = z.object({
+  label: z
+    .string()
+    .trim()
+    .min(3, "3 caractères minimum")
+    .max(80, "80 caractères maximum"),
+});
+export type RejectCauseCreateInput = z.infer<typeof rejectCauseCreateSchema>;
 
 // ── Non-conformité ────────────────────────────────────
 export const ncSchema = z.object({

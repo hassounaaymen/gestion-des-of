@@ -1,13 +1,17 @@
 import type { Prisma } from "@prisma/client";
-import { scopeUsine } from "./rbac";
+import { scopeUsines } from "./rbac";
+import { usinesLabel } from "./usines";
 import type { SessionPayload } from "./session";
 
 /**
  * Cloisonnement des données par usine.
  *
- * L'usine d'un ordre est celle de son magasin de destination (`store.unite`).
- * Un utilisateur rattaché à une usine ne voit que les ordres de cette usine ;
- * l'informatique et la Direction Générale voient tout.
+ * L'usine d'un ordre est celle de son magasin de destination (`store.unite`) ;
+ * celle d'un article est sa ligne de production ERP (`article.productionLine`),
+ * qui porte le même nom (« QUADRA », « VIFESA », …).
+ *
+ * Un utilisateur rattaché à une ou plusieurs usines ne voit que ces usines ;
+ * un rattachement `null` vaut « toutes les usines ».
  *
  * Ces filtres sont appliqués **côté serveur** : masquer un écran ne suffirait
  * pas, il faut que la requête elle-même soit restreinte.
@@ -15,38 +19,42 @@ import type { SessionPayload } from "./session";
 
 /** Clause à fusionner dans un `where` de ProductionOrder. */
 export function orderScope(session: SessionPayload): Prisma.ProductionOrderWhereInput {
-  const usine = scopeUsine(session);
-  return usine ? { store: { unite: usine } } : {};
+  const usines = scopeUsines(session);
+  return usines ? { store: { unite: { in: usines } } } : {};
 }
 
 /** Clause pour les entités rattachées à un ordre (NC, contrôles…). */
 export function viaOrderScope(session: SessionPayload) {
-  const usine = scopeUsine(session);
-  return usine ? { order: { store: { unite: usine } } } : {};
+  const usines = scopeUsines(session);
+  return usines ? { order: { store: { unite: { in: usines } } } } : {};
 }
 
 /** Clause pour les lignes de production. */
 export function productionLineScope(session: SessionPayload): Prisma.ProductionLineWhereInput {
-  const usine = scopeUsine(session);
-  return usine ? { order: { store: { unite: usine } } } : {};
+  const usines = scopeUsines(session);
+  return usines ? { order: { store: { unite: { in: usines } } } } : {};
 }
 
 /** Clause pour les magasins visibles. */
 export function storeScope(session: SessionPayload): Prisma.StoreWhereInput {
-  const usine = scopeUsine(session);
-  return usine ? { unite: usine } : {};
+  const usines = scopeUsines(session);
+  return usines ? { unite: { in: usines } } : {};
 }
 
 /**
- * Clause pour la gestion des comptes : un directeur d'usine ne voit et ne
- * modifie que les comptes de son site.
+ * Clause pour les articles visibles.
+ *
+ * Un article se rattache à une usine par sa ligne de production, déduite du
+ * groupe compta produit de l'ERP (« PF-QUADRA » → « QUADRA »). Les articles
+ * sans ligne ne relèvent d'aucune usine : ils sont exclus du périmètre d'un
+ * compte rattaché, et ne restent visibles que dans le référentiel brut.
  */
-export function userScope(session: SessionPayload): Prisma.UserWhereInput {
-  const usine = scopeUsine(session);
-  return usine ? { usine } : {};
+export function articleScope(session: SessionPayload): Prisma.ArticleWhereInput {
+  const usines = scopeUsines(session);
+  return usines ? { productionLine: { in: usines } } : {};
 }
 
 /** Libellé du périmètre courant, pour l'affichage. */
 export function scopeLabel(session: SessionPayload): string {
-  return scopeUsine(session) ?? "Toutes les usines";
+  return usinesLabel(scopeUsines(session));
 }

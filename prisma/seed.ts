@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { DEFAULT_QUALITY_SPECS } from "../src/lib/default-quality-specs";
 import { DEFAULT_REJECT_CAUSES } from "../src/lib/default-reject-causes";
 import { createPrismaClient, describeTarget } from "../src/lib/db-client";
+import { serializeUsines } from "../src/lib/usines";
 
 const prisma = createPrismaClient();
 
@@ -12,39 +13,43 @@ async function main() {
   // ── Utilisateurs (un par rôle) ──────────────────────
   const pwd = await bcrypt.hash("Password123!", 12);
 
-  // Les rôles à portée globale ne sont rattachés à aucune usine (`usine: null`) ;
-  // les rôles opérationnels sont cloisonnés sur leur site.
+  // Les rôles à portée globale ne sont rattachés à aucune usine (`usines: null`,
+  // qui vaut « toutes ») ; les rôles opérationnels sont cloisonnés sur leur
+  // site. Un compte peut couvrir plusieurs usines : voir `dir.sud`.
   const users: {
     username: string;
     email: string;
     fullName: string;
     role: Role;
-    usine: string | null;
+    usines: string[] | null;
   }[] = [
-    { username: "admin", email: "admin@bestbeton.tn", fullName: "Administrateur Système", role: Role.SUPER_ADMIN, usine: null },
-    { username: "direction", email: "direction@bestbeton.tn", fullName: "Direction Générale", role: Role.DIRECTION, usine: null },
+    { username: "admin", email: "admin@bestbeton.tn", fullName: "Administrateur Système", role: Role.SUPER_ADMIN, usines: null },
+    { username: "direction", email: "direction@bestbeton.tn", fullName: "Direction Générale", role: Role.DIRECTION, usines: null },
 
-    // Un directeur par usine
-    { username: "dir.quadra", email: "dir.quadra@bestbeton.tn", fullName: "Directeur QUADRA", role: Role.DIRECTEUR_USINE, usine: "QUADRA" },
-    { username: "dir.vifesa", email: "dir.vifesa@bestbeton.tn", fullName: "Directeur VIFESA", role: Role.DIRECTEUR_USINE, usine: "VIFESA" },
+    // Un directeur par usine…
+    { username: "dir.quadra", email: "dir.quadra@bestbeton.tn", fullName: "Directeur QUADRA", role: Role.DIRECTEUR_USINE, usines: ["QUADRA"] },
+    { username: "dir.vifesa", email: "dir.vifesa@bestbeton.tn", fullName: "Directeur VIFESA", role: Role.DIRECTEUR_USINE, usines: ["VIFESA"] },
+    // …ou un directeur couvrant plusieurs sites
+    { username: "dir.sud", email: "dir.sud@bestbeton.tn", fullName: "Directeur Pôle Sud", role: Role.DIRECTEUR_USINE, usines: ["PRENSOLAND", "COMPACTA"] },
 
     // Équipes opérationnelles, rattachées à leur site
-    { username: "production", email: "prod@bestbeton.tn", fullName: "Responsable Production QUADRA", role: Role.PRODUCTION, usine: "QUADRA" },
-    { username: "qualite", email: "qualite@bestbeton.tn", fullName: "Responsable Qualité QUADRA", role: Role.QUALITY, usine: "QUADRA" },
-    { username: "gestion", email: "gestion@bestbeton.tn", fullName: "Gestion Production QUADRA", role: Role.PRODUCTION_MANAGER, usine: "QUADRA" },
-    { username: "prod.vifesa", email: "prod.vifesa@bestbeton.tn", fullName: "Responsable Production VIFESA", role: Role.PRODUCTION, usine: "VIFESA" },
-    { username: "qual.vifesa", email: "qual.vifesa@bestbeton.tn", fullName: "Responsable Qualité VIFESA", role: Role.QUALITY, usine: "VIFESA" },
-    { username: "consultation", email: "viewer@bestbeton.tn", fullName: "Invité Consultation", role: Role.VIEWER, usine: "QUADRA" },
+    { username: "production", email: "prod@bestbeton.tn", fullName: "Responsable Production QUADRA", role: Role.PRODUCTION, usines: ["QUADRA"] },
+    { username: "qualite", email: "qualite@bestbeton.tn", fullName: "Responsable Qualité QUADRA", role: Role.QUALITY, usines: ["QUADRA"] },
+    { username: "gestion", email: "gestion@bestbeton.tn", fullName: "Gestion Production QUADRA", role: Role.PRODUCTION_MANAGER, usines: ["QUADRA"] },
+    { username: "prod.vifesa", email: "prod.vifesa@bestbeton.tn", fullName: "Responsable Production VIFESA", role: Role.PRODUCTION, usines: ["VIFESA"] },
+    { username: "qual.vifesa", email: "qual.vifesa@bestbeton.tn", fullName: "Responsable Qualité VIFESA", role: Role.QUALITY, usines: ["VIFESA"] },
+    { username: "consultation", email: "viewer@bestbeton.tn", fullName: "Invité Consultation", role: Role.VIEWER, usines: ["QUADRA"] },
   ];
 
   for (const u of users) {
+    const usines = serializeUsines(u.usines);
     await prisma.user.upsert({
       where: { username: u.username },
-      update: { role: u.role, fullName: u.fullName, email: u.email, usine: u.usine },
-      create: { ...u, password: pwd },
+      update: { role: u.role, fullName: u.fullName, email: u.email, usines },
+      create: { ...u, usines, password: pwd },
     });
   }
-  console.log(`  ✔ ${users.length} utilisateurs (2 globaux, 2 directeurs d'usine, 6 opérationnels)`);
+  console.log(`  ✔ ${users.length} utilisateurs (2 globaux, 3 directeurs d'usine, 6 opérationnels)`);
 
   // ── Plans de contrôle qualité par famille ───────────
   for (const spec of DEFAULT_QUALITY_SPECS) {

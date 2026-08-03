@@ -32,8 +32,11 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/quality", label: "Contrôle qualité", icon: ShieldCheck, permission: "quality:read", group: "Qualité" },
   { href: "/ecarts", label: "Écarts Prod. / Qualité", icon: Scale, permission: "quality:read", group: "Qualité" },
   { href: "/non-conformities", label: "Non-conformités", icon: AlertTriangle, permission: "nc:read", group: "Qualité" },
-  { href: "/articles", label: "Articles (ERP)", icon: Package, permission: "erp:read", group: "Référentiel" },
-  { href: "/stores", label: "Magasins (ERP)", icon: Warehouse, permission: "erp:read", group: "Référentiel" },
+  // Référentiel ERP brut : réservé à l'administration technique. Les autres
+  // rôles accèdent aux articles/magasins de leur périmètre par le sélecteur
+  // d'un OF, sans avoir à parcourir le catalogue complet.
+  { href: "/articles", label: "Articles (ERP)", icon: Package, permission: "erp:browse", group: "Référentiel" },
+  { href: "/stores", label: "Magasins (ERP)", icon: Warehouse, permission: "erp:browse", group: "Référentiel" },
   { href: "/audit", label: "Historique", icon: History, permission: "audit:read", group: "Administration" },
   { href: "/users", label: "Utilisateurs", icon: Users, permission: "user:manage", group: "Administration" },
 ];

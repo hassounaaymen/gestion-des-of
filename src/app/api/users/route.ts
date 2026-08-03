@@ -1,12 +1,13 @@
 import { userService } from "@/services/user.service";
 import { userCreateSchema } from "@/lib/validations";
 import { handle, ok, requirePermission } from "@/lib/api";
-import { rolesAttribuables, scopeUsine } from "@/lib/rbac";
+import { rolesAttribuables, scopeUsines } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   return handle(async () => {
     const session = await requirePermission("user:manage");
+    const portee = scopeUsines(session);
     const [users, unites] = await Promise.all([
       userService.list(session),
       prisma.store.findMany({
@@ -21,11 +22,13 @@ export async function GET() {
       users,
       /** Rôles que l'appelant a le droit d'attribuer */
       roles: rolesAttribuables(session.role),
-      /** Usines disponibles ; réduites à la sienne pour un directeur d'usine */
-      unites: scopeUsine(session)
-        ? [scopeUsine(session)!]
-        : unites.map((u) => u.unite!).filter(Boolean),
-      scope: scopeUsine(session),
+      /** Usines attribuables ; réduites à son périmètre pour un directeur */
+      unites: portee ?? unites.map((u) => u.unite!).filter(Boolean),
+      /**
+       * Périmètre de l'appelant : `null` = toutes les usines, seul cas où
+       * il peut accorder « Toutes les usines » à un compte.
+       */
+      scope: portee,
     });
   });
 }

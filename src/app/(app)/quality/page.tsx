@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ORDER_STATUS, QUALITY_DECISION } from "@/lib/status";
 import { formatDate } from "@/lib/utils";
 import { getSession } from "@/lib/session";
-import { scopeUsine } from "@/lib/rbac";
+import { scopeUsines } from "@/lib/rbac";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -14,11 +14,11 @@ export const dynamic = "force-dynamic";
 export default async function QualityPage() {
   const session = await getSession();
   if (!session) redirect("/login");
-  const usine = scopeUsine(session);
+  const usines = scopeUsines(session);
   const orders = await prisma.productionOrder.findMany({
     where: {
       status: { in: ["PRODUCTION_VALIDATED", "QUALITY_VALIDATED"] },
-      ...(usine ? { store: { unite: usine } } : {}),
+      ...(usines ? { store: { unite: { in: usines } } } : {}),
     },
     include: { article: true, qualityControls: true },
     orderBy: { productionValidatedAt: "desc" },

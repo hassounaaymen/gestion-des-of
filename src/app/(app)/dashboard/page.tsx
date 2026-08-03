@@ -12,7 +12,7 @@ import { PerformanceTable } from "@/components/dashboard/performance-table";
 import { formatNumber, formatDateTime } from "@/lib/utils";
 import { Database } from "lucide-react";
 import { getSession } from "@/lib/session";
-import { scopeUsine } from "@/lib/rbac";
+import { scopeUsines } from "@/lib/rbac";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const session = await getSession();
   if (!session) redirect("/login");
-  const data = await getDashboardData(scopeUsine(session));
+  const data = await getDashboardData(scopeUsines(session));
   const k = data.kpis;
 
   return (

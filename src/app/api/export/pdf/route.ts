@@ -5,7 +5,7 @@ import {
   buildSynthesisPdf,
 } from "@/services/export-pdf.service";
 import { writeAudit, requestMeta } from "@/lib/audit";
-import { scopeUsine } from "@/lib/rbac";
+import { scopeUsines } from "@/lib/rbac";
 
 export const maxDuration = 120;
 
@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     if (type === "order") {
       const id = sp.get("id");
       if (!id) throw new ApiError(400, "Paramètre `id` requis pour la fiche d'OF");
-      buffer = await buildOrderPdf(id, scopeUsine(session));
+      buffer = await buildOrderPdf(id, scopeUsines(session));
       filename = `fiche-of-${id.slice(0, 8)}-${stamp}.pdf`;
     } else if (type === "planning") {
       // Mêmes filtres que l'écran : fenêtre de dates (ou périodes) et usine
@@ -30,7 +30,12 @@ export async function GET(req: Request) {
       const offset = Number(sp.get("offset") ?? 0) || 0;
       const rawFrom = sp.get("from");
       const rawTo = sp.get("to");
-      const usine = scopeUsine(session) ?? sp.get("usine");
+      // Comme à l'écran, le filtre d'URL ne peut que restreindre le périmètre
+      const portee = scopeUsines(session);
+      const demande = sp.get("usine")?.trim() || null;
+      const filtre =
+        demande && (portee === null || portee.includes(demande)) ? demande : null;
+      const usines = filtre ? [filtre] : portee;
 
       const from = rawFrom ? new Date(`${rawFrom}T00:00:00`) : new Date();
       from.setHours(0, 0, 0, 0);
@@ -40,12 +45,12 @@ export async function GET(req: Request) {
         from,
         to: rawTo ? new Date(`${rawTo}T00:00:00`) : undefined,
         days: rawTo ? undefined : days,
-        usine,
+        usines,
       });
-      const suffix = usine ? `-${usine.replace(/\s+/g, "").toLowerCase()}` : "";
+      const suffix = filtre ? `-${filtre.replace(/\s+/g, "").toLowerCase()}` : "";
       filename = `planning-production${suffix}-${stamp}.pdf`;
     } else if (type === "synthesis") {
-      buffer = await buildSynthesisPdf(scopeUsine(session));
+      buffer = await buildSynthesisPdf(scopeUsines(session));
       filename = `rapport-synthese-${stamp}.pdf`;
     } else {
       throw new ApiError(400, `Type d'export inconnu : ${type}`);

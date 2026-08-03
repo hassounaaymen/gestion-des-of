@@ -5,7 +5,7 @@ import type { Role } from "@prisma/client";
  *
  * Deux dimensions indépendantes :
  *  - la permission dit *ce que* l'utilisateur peut faire ;
- *  - l'usine de rattachement dit *sur quel périmètre* (voir `scopeUsine`).
+ *  - les usines de rattachement disent *sur quel périmètre* (voir `scopeUsines`).
  */
 export type Permission =
   // Ordres de fabrication
@@ -25,7 +25,8 @@ export type Permission =
   | "nc:read"
   | "nc:write"
   // Référentiel ERP (toujours lecture seule)
-  | "erp:read"
+  | "erp:read" //     consulter les articles/magasins de son périmètre (choix d'un OF)
+  | "erp:browse" //   parcourir le référentiel brut complet (écrans « Référentiel »)
   | "erp:sync"
   // Planning de production
   | "planning:read"
@@ -47,7 +48,7 @@ const MATRIX: Record<Role, Permission[]> = {
     "production:read", "production:write",
     "quality:read", "quality:write",
     "nc:read", "nc:write",
-    "erp:read", "erp:sync",
+    "erp:read", "erp:browse", "erp:sync",
     "planning:read", "planning:write",
     "report:read", "report:export",
     "user:manage", "user:manageAll", "audit:read", "settings:manage",
@@ -64,12 +65,16 @@ const MATRIX: Record<Role, Permission[]> = {
     "audit:read",
   ],
   /**
-   * Directeur d'usine : administre son site. Il gère les comptes de son
-   * usine et suit toute son activité, sans pouvoir saisir à la place
+   * Directeur d'usine : administre son ou ses sites. Il gère les comptes de
+   * son périmètre et suit toute son activité, sans pouvoir saisir à la place
    * des équipes ni voir les autres usines.
+   *
+   * C'est lui qui prononce l'approbation finale de l'OF (`order:close`) :
+   * la validation de fin de cycle relève de la direction du site, pas de
+   * l'équipe qui a produit.
    */
   DIRECTEUR_USINE: [
-    "order:read",
+    "order:read", "order:close",
     "production:read",
     "quality:read",
     "nc:read",
@@ -97,7 +102,7 @@ const MATRIX: Record<Role, Permission[]> = {
     "report:read", "report:export",
   ],
   PRODUCTION_MANAGER: [
-    "order:read", "order:close",
+    "order:read",
     "production:read",
     "quality:read",
     "nc:read",
@@ -137,12 +142,16 @@ export function estRoleGlobal(role: Role) {
 }
 
 /**
- * Usine sur laquelle porte la session, ou `null` pour « toutes les usines ».
+ * Usines sur lesquelles porte la session, ou `null` pour « toutes les usines ».
  * C'est cette valeur qui filtre les données côté serveur.
  */
-export function scopeUsine(session: { role: Role; usine?: string | null }): string | null {
+export function scopeUsines(session: {
+  role: Role;
+  usines?: string[] | null;
+}): string[] | null {
   if (estRoleGlobal(session.role)) return null;
-  return session.usine?.trim() || null;
+  const liste = (session.usines ?? []).map((u) => u.trim()).filter(Boolean);
+  return liste.length > 0 ? liste : null;
 }
 
 /**

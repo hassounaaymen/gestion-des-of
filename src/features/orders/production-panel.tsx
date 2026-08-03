@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Lock, Loader2, Save, AlertTriangle, Wand2 } from "lucide-react";
+import { Lock, Loader2, Save, AlertTriangle, Wand2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +28,12 @@ interface CauseGroup {
   causes: { code: string; label: string; category: string }[];
 }
 
+/**
+ * Valeur sentinelle de l'option « Autre » : elle ne peut entrer en collision
+ * avec un code du référentiel, qui n'utilise jamais ce préfixe.
+ */
+const AUTRE_OPTION = "__autre__";
+
 export function ProductionPanel({
   orderId,
   initial,
@@ -46,6 +52,13 @@ export function ProductionPanel({
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+  // Saisie d'une cause de rebut absente du référentiel (option « Autre »)
+  const [saisieLibre, setSaisieLibre] = useState(false);
+  const [nouvelleCause, setNouvelleCause] = useState("");
+  const [ajout, setAjout] = useState<{ enCours: boolean; erreur: string | null }>({
+    enCours: false,
+    erreur: null,
+  });
   const disabled = !editable || locked;
 
   function set<K extends keyof ProdData>(key: K, value: ProdData[K]) {
@@ -68,7 +81,7 @@ export function ProductionPanel({
   }, [form]);
 
   // Référentiel des causes de rebut (5M / Ishikawa)
-  const { data: causeData } = useQuery({
+  const { data: causeData, refetch: refetchCauses } = useQuery({
     queryKey: ["reject-causes"],
     queryFn: async () => {
       const res = await fetch("/api/reject-causes");
@@ -90,6 +103,43 @@ export function ProductionPanel({
       causeRebut: found?.label ?? null,
       causeRebutM5: found?.category ?? null,
     }));
+  }
+
+  /**
+   * Cause absente du référentiel : elle y est ajoutée avant d'être
+   * sélectionnée, pour rester disponible aux saisies suivantes et ne pas
+   * fragmenter le Pareto des défauts.
+   */
+  async function ajouterCause() {
+    const label = nouvelleCause.trim();
+    if (!label) return;
+    setAjout({ enCours: true, erreur: null });
+    try {
+      const res = await fetch("/api/reject-causes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.details?.[0]?.message ?? data.error ?? "Échec");
+      }
+      await refetchCauses();
+      setForm((f) => ({
+        ...f,
+        causeRebutCode: data.code,
+        causeRebut: data.label,
+        causeRebutM5: data.category,
+      }));
+      setNouvelleCause("");
+      setSaisieLibre(false);
+      setAjout({ enCours: false, erreur: null });
+    } catch (e) {
+      setAjout({
+        enCours: false,
+        erreur: e instanceof Error ? e.message : "Erreur",
+      });
+    }
   }
 
   async function save() {
@@ -172,9 +222,14 @@ export function ProductionPanel({
             {form.qteRebut > 0 && <span className="ml-1 text-destructive">*</span>}
           </Label>
           <select
-            value={form.causeRebutCode ?? ""}
+            value={saisieLibre ? AUTRE_OPTION : (form.causeRebutCode ?? "")}
             disabled={disabled}
-            onChange={(e) => selectCause(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setAjout({ enCours: false, erreur: null });
+              setSaisieLibre(v === AUTRE_OPTION);
+              if (v !== AUTRE_OPTION) selectCause(v);
+            }}
             className={cn(
               "h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               causeManquante && "border-destructive",
@@ -192,13 +247,58 @@ export function ProductionPanel({
                 ))}
               </optgroup>
             ))}
+            <option value={AUTRE_OPTION}>Autre — préciser…</option>
           </select>
-          {form.causeRebutM5 && (
+
+          {saisieLibre && !disabled && (
+            <div className="space-y-2 rounded-md border border-dashed bg-muted/30 p-3">
+              <Label htmlFor="cause-libre" className="text-xs">
+                Nouvelle cause de rebut
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="cause-libre"
+                  value={nouvelleCause}
+                  maxLength={80}
+                  placeholder="ex. Décollement des arêtes"
+                  onChange={(e) => setNouvelleCause(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void ajouterCause();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void ajouterCause()}
+                  disabled={ajout.enCours || nouvelleCause.trim().length < 3}
+                >
+                  {ajout.enCours ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  Ajouter
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Elle sera ajoutée au référentiel sous « Autre » et proposée aux
+                prochaines saisies.
+              </p>
+              {ajout.erreur && (
+                <p className="text-xs text-destructive">{ajout.erreur}</p>
+              )}
+            </div>
+          )}
+
+          {form.causeRebutM5 && !saisieLibre && (
             <p className="text-xs text-muted-foreground">
               Axe 5M : <span className="font-medium text-foreground">{form.causeRebutM5}</span>
             </p>
           )}
-          {causeManquante && (
+          {causeManquante && !saisieLibre && (
             <p className="text-xs text-destructive">
               Requise pour l'analyse des causes (Pareto des défauts et diagramme d'Ishikawa).
             </p>

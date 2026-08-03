@@ -1,5 +1,8 @@
+import { notFound, redirect } from "next/navigation";
 import { Lock } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/session";
+import { can } from "@/lib/rbac";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,6 +17,11 @@ const STORE_TYPES: Record<string, { label: string; variant: "success" | "warning
 };
 
 export default async function StoresPage() {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  // Le référentiel brut est réservé à l'administration technique
+  if (!can(session.role, "erp:browse")) notFound();
+
   const stores = await prisma.store.findMany({
     orderBy: [{ type: "asc" }, { code: "asc" }],
     include: { _count: { select: { productionOrders: true } } },

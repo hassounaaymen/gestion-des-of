@@ -4,6 +4,7 @@ import { createSession } from "@/lib/session";
 import { loginSchema } from "@/lib/validations";
 import { handle, ok, ApiError } from "@/lib/api";
 import { writeAudit, requestMeta } from "@/lib/audit";
+import { parseUsines } from "@/lib/usines";
 
 export async function POST(req: Request) {
   return handle(async () => {
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
       username: user.username,
       fullName: user.fullName,
       role: user.role,
-      usine: user.usine,
+      usines: parseUsines(user.usines),
     });
 
     await prisma.user.update({

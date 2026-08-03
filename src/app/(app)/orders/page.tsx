@@ -16,13 +16,13 @@ import {
 } from "@/components/ui/table";
 import { ORDER_STATUS } from "@/lib/status";
 import { formatDate, formatNumber } from "@/lib/utils";
-import { scopeUsine } from "@/lib/rbac";
+import { scopeUsines } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
 export default async function OrdersPage() {
   const session = await getSession();
-  const orders = await orderService.list({ usine: session ? scopeUsine(session) : null });
+  const orders = await orderService.list({ usines: session ? scopeUsines(session) : null });
   const canCreate = session && can(session.role, "order:create");
 
   return (

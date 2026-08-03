@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ORDER_STATUS } from "@/lib/status";
 import { formatNumber } from "@/lib/utils";
 import { getSession } from "@/lib/session";
-import { scopeUsine } from "@/lib/rbac";
+import { scopeUsines } from "@/lib/rbac";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -14,11 +14,11 @@ export const dynamic = "force-dynamic";
 export default async function ProductionPage() {
   const session = await getSession();
   if (!session) redirect("/login");
-  const usine = scopeUsine(session);
+  const usines = scopeUsines(session);
   const orders = await prisma.productionOrder.findMany({
     where: {
       status: { in: ["DRAFT", "IN_PRODUCTION"] },
-      ...(usine ? { store: { unite: usine } } : {}),
+      ...(usines ? { store: { unite: { in: usines } } } : {}),
     },
     include: { article: true, productionLines: true },
     orderBy: { createdAt: "desc" },

@@ -200,9 +200,9 @@ function table(
 }
 
 /** Fiche complète d'un ordre de fabrication. */
-export async function buildOrderPdf(orderId: string, usine?: string | null): Promise<Buffer> {
+export async function buildOrderPdf(orderId: string, usines?: string[] | null): Promise<Buffer> {
   const order = await prisma.productionOrder.findFirst({
-    where: { id: orderId, ...(usine ? { store: { unite: usine } } : {}) },
+    where: { id: orderId, ...(usines ? { store: { unite: { in: usines } } } : {}) },
     include: {
       article: true, store: true,
       productionLines: { include: { enteredBy: { select: { fullName: true } } } },
@@ -364,7 +364,7 @@ export async function buildPlanningPdf(options?: {
   from?: Date;
   to?: Date;
   days?: number;
-  usine?: string | null;
+  usines?: string[] | null;
 }): Promise<Buffer> {
   const data = await getPlanning(options);
 
@@ -392,7 +392,7 @@ export async function buildPlanningPdf(options?: {
         doc,
         "Planning de production",
         `Du ${formatDate(data.from)} au ${formatDate(data.to)} — ${data.totalOrders} OF actifs` +
-          (data.usine ? ` · ${data.usine}` : " · toutes usines"),
+          (data.usines ? ` · ${data.usines.join(", ")}` : " · toutes usines"),
       );
 
       // ── En-tête calendrier ──────────────────────────
@@ -553,10 +553,10 @@ export async function buildPlanningPdf(options?: {
 }
 
 /** Rapport de synthèse Direction : KPI, performance, écarts. */
-export async function buildSynthesisPdf(usine?: string | null): Promise<Buffer> {
+export async function buildSynthesisPdf(usines?: string[] | null): Promise<Buffer> {
   const [data, ecarts] = await Promise.all([
-    getDashboardData(usine),
-    getEcarts({ onlyWithEcart: true, usine }),
+    getDashboardData(usines),
+    getEcarts({ onlyWithEcart: true, usines }),
   ]);
 
   return render((doc) => {

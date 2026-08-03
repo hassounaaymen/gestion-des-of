@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { NC_GRAVITE, NC_STATUS } from "@/lib/status";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { getSession } from "@/lib/session";
-import { scopeUsine } from "@/lib/rbac";
+import { scopeUsines } from "@/lib/rbac";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -14,9 +14,9 @@ export const dynamic = "force-dynamic";
 export default async function NonConformitiesPage() {
   const session = await getSession();
   if (!session) redirect("/login");
-  const usine = scopeUsine(session);
+  const usines = scopeUsines(session);
   const list = await prisma.nonConformity.findMany({
-    where: usine ? { order: { store: { unite: usine } } } : {},
+    where: usines ? { order: { store: { unite: { in: usines } } } } : {},
     include: { article: true, order: true, responsable: { select: { fullName: true } } },
     orderBy: { date: "desc" },
   });

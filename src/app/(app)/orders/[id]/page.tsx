@@ -14,7 +14,7 @@ import { PlanButton } from "@/features/planning/plan-button";
 import { prisma } from "@/lib/prisma";
 import { ORDER_STATUS } from "@/lib/status";
 import { formatDate, formatDateTime } from "@/lib/utils";
-import { scopeUsine } from "@/lib/rbac";
+import { scopeUsines } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +40,7 @@ export default async function OrderDetailPage({
   const session = await getSession();
   if (!session) redirect("/login");
   const { id } = await params;
-  const order = await orderService.get(id, scopeUsine(session));
+  const order = await orderService.get(id, scopeUsines(session));
   if (!order) notFound();
 
   // Auto-complétion des ateliers : lignes ERP + ateliers déjà utilisés

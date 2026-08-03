@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { CalendarClock, AlertTriangle, ChevronLeft, ChevronRight, FileText } from "lucide-react";
 import { getPlanning } from "@/services/planning.service";
 import { getSession } from "@/lib/session";
-import { can, scopeUsine } from "@/lib/rbac";
+import { can, scopeUsines } from "@/lib/rbac";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -65,16 +65,18 @@ export default async function PlanningPage({
   start.setHours(0, 0, 0, 0);
   if (!explicitFrom) start.setDate(start.getDate() + offset * horizon);
 
-  // Un utilisateur rattaché à une usine ne peut pas élargir son périmètre
-  // via l'URL : sa portée écrase toujours le filtre demandé.
-  const portee = scopeUsine(session);
-  const usineFiltre = portee ?? sp.usine ?? null;
+  // Un utilisateur rattaché à des usines ne peut pas élargir son périmètre
+  // via l'URL : un filtre hors portée est ignoré, pas honoré.
+  const portee = scopeUsines(session);
+  const demande = sp.usine?.trim() || null;
+  const usineFiltre =
+    demande && (portee === null || portee.includes(demande)) ? demande : null;
 
   const data = await getPlanning({
     from: start,
     to: explicitTo ?? undefined,
     days: explicitTo ? undefined : horizon,
-    usine: usineFiltre,
+    usines: usineFiltre ? [usineFiltre] : portee,
   });
 
   const isoDay = (d: Date) => d.toISOString().slice(0, 10);
@@ -116,7 +118,7 @@ export default async function PlanningPage({
         description={
           `Charge par atelier du ${formatDate(data.from)} au ${formatDate(data.to)} — ` +
           `${data.totalOrders} OF actifs` +
-          (data.usine ? ` · ${data.usine}` : "")
+          (data.usines ? ` · ${data.usines.join(", ")}` : "")
         }
         action={
           <div className="flex items-center gap-2">
@@ -161,8 +163,10 @@ export default async function PlanningPage({
       <PlanningFilters
         from={isoDay(data.from)}
         to={isoDay(data.to)}
-        usine={data.usine}
-        unites={portee ? [] : data.knownUnites}
+        usine={usineFiltre}
+        // Un compte multi-usines garde un sélecteur, borné à son périmètre ;
+        // rattaché à un seul site, il n'a rien à choisir.
+        unites={portee ? (portee.length > 1 ? portee : []) : data.knownUnites}
       />
 
       {data.ateliers.length === 0 ? (

@@ -1,3 +1,4 @@
+import { notFound, redirect } from "next/navigation";
 import { Lock } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/page-header";
@@ -9,6 +10,11 @@ import { can } from "@/lib/rbac";
 export const dynamic = "force-dynamic";
 
 export default async function ArticlesPage() {
+  const guard = await getSession();
+  if (!guard) redirect("/login");
+  // Le référentiel brut est réservé à l'administration technique
+  if (!can(guard.role, "erp:browse")) notFound();
+
   const [families, lines, session, total] = await Promise.all([
     prisma.article.findMany({
       where: { family: { not: null } },

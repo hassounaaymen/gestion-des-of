@@ -11,7 +11,7 @@ import { ORDER_STATUS, QUALITY_DECISION } from "@/lib/status";
 import { formatEcart } from "@/lib/reconciliation";
 import { formatDate, formatNumber, cn } from "@/lib/utils";
 import { getSession } from "@/lib/session";
-import { scopeUsine } from "@/lib/rbac";
+import { scopeUsines } from "@/lib/rbac";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export default async function EcartsPage({
   const showAll = all === "1";
   const session = await getSession();
   if (!session) redirect("/login");
-  const data = await getEcarts({ onlyWithEcart: !showAll, usine: scopeUsine(session) });
+  const data = await getEcarts({ onlyWithEcart: !showAll, usines: scopeUsines(session) });
 
   return (
     <div>
