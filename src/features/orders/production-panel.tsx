@@ -318,7 +318,13 @@ export function ProductionPanel({
 
       {editable && !locked && (
         <div className="flex items-center gap-3">
-          <Button onClick={save} disabled={saving || !kpi.coherent || causeManquante}>
+          {/* Tant que la cause libre n'est pas ajoutée au référentiel, elle
+              n'est rattachée à rien : enregistrer retomberait en silence sur
+              la cause précédente. */}
+          <Button
+            onClick={save}
+            disabled={saving || !kpi.coherent || causeManquante || saisieLibre}
+          >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Enregistrer la saisie
           </Button>

@@ -21,7 +21,8 @@ interface UserRow {
   email: string;
   fullName: string;
   role: Role;
-  usine: string | null;
+  /** `null` = toutes les usines */
+  usines: string[] | null;
   isActive: boolean;
   lastLogin: string | null;
 }
@@ -30,8 +31,11 @@ interface Payload {
   users: UserRow[];
   roles: Role[];
   unites: string[];
-  scope: string | null;
+  /** Périmètre de l'appelant ; `null` = toutes les usines */
+  scope: string[] | null;
 }
+
+const TOUTES = "Toutes les usines";
 
 /** Rôles à portée globale : ils ne se rattachent à aucune usine. */
 const ROLES_GLOBAUX: Role[] = ["SUPER_ADMIN", "DIRECTION"];
@@ -69,10 +73,12 @@ export function UsersManager({ currentUserId }: { currentUserId: string }) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Chargement…</p>;
   }
 
-  // Regroupement par usine : c'est la lecture naturelle pour la direction
+  // Regroupement par rattachement : c'est la lecture naturelle pour la
+  // direction. Un compte multi-sites forme son propre groupe (« QUADRA,
+  // VIFESA ») plutôt que d'apparaître en double.
   const groupes = new Map<string, UserRow[]>();
   for (const u of data.users) {
-    const k = u.usine ?? "Toutes les usines";
+    const k = u.usines === null ? TOUTES : u.usines.join(", ");
     groupes.set(k, [...(groupes.get(k) ?? []), u]);
   }
 
@@ -84,7 +90,9 @@ export function UsersManager({ currentUserId }: { currentUserId: string }) {
           {data.scope && (
             <>
               {" · périmètre "}
-              <span className="font-medium text-foreground">{data.scope}</span>
+              <span className="font-medium text-foreground">
+                {data.scope.join(", ")}
+              </span>
             </>
           )}
         </p>
@@ -96,7 +104,7 @@ export function UsersManager({ currentUserId }: { currentUserId: string }) {
       {Array.from(groupes.entries()).map(([usine, users]) => (
         <div key={usine} className="space-y-2">
           <h3 className="flex items-center gap-2 text-sm font-semibold">
-            {usine === "Toutes les usines" ? (
+            {usine === TOUTES ? (
               <ShieldCheck className="h-4 w-4 text-muted-foreground" />
             ) : (
               <Factory className="h-4 w-4 text-primary" />
@@ -201,38 +209,51 @@ function UserDialog({
   user?: UserRow;
   roles: Role[];
   unites: string[];
-  scope: string | null;
+  scope: string[] | null;
   isSelf?: boolean;
   onSaved: () => void;
 }) {
   const modification = Boolean(user);
-  const [form, setForm] = useState({
-    username: "", email: "", fullName: "",
-    role: (roles[0] ?? "VIEWER") as Role,
-    usine: scope ?? "",
+  /**
+   * `toutes` est distingué d'une liste vide : « toutes les usines » est un
+   * choix explicite, alors qu'une liste vide est une sélection oubliée, que
+   * le serveur refuse.
+   */
+  const initial = () => ({
+    username: user?.username ?? "",
+    email: user?.email ?? "",
+    fullName: user?.fullName ?? "",
+    role: user?.role ?? ((roles[0] ?? "VIEWER") as Role),
+    toutes: user ? user.usines === null : scope === null,
+    usines: user?.usines ?? scope ?? [],
     password: "",
-    isActive: true,
+    isActive: user?.isActive ?? true,
   });
+  const [form, setForm] = useState(initial);
   const [key, setKey] = useState<string | undefined>(user?.id);
   if (key !== user?.id) {
     setKey(user?.id);
-    setForm({
-      username: user?.username ?? "",
-      email: user?.email ?? "",
-      fullName: user?.fullName ?? "",
-      role: user?.role ?? ((roles[0] ?? "VIEWER") as Role),
-      usine: user?.usine ?? scope ?? "",
-      password: "",
-      isActive: user?.isActive ?? true,
-    });
+    setForm(initial());
   }
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const roleGlobal = ROLES_GLOBAUX.includes(form.role);
+  // Seul un administrateur voyant toutes les usines peut accorder ce périmètre
+  const peutToutAccorder = scope === null;
+  const toutes = roleGlobal || form.toutes;
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  function basculerUsine(u: string) {
+    setForm((f) => ({
+      ...f,
+      usines: f.usines.includes(u)
+        ? f.usines.filter((x) => x !== u)
+        : [...f.usines, u],
+    }));
   }
 
   async function submit(e: React.FormEvent) {
@@ -240,12 +261,20 @@ function UserDialog({
     setSaving(true);
     setError(null);
     try {
+      // `null` = toutes les usines ; une liste vide serait refusée par le
+      // serveur, on l'intercepte donc avant l'envoi.
+      const rattachement = toutes ? null : form.usines;
+      if (rattachement !== null && rattachement.length === 0) {
+        setError("Sélectionnez au moins une usine, ou « Toutes les usines »");
+        setSaving(false);
+        return;
+      }
       const body = modification
         ? {
             email: form.email,
             fullName: form.fullName,
             role: form.role,
-            usine: roleGlobal ? null : form.usine,
+            usines: rattachement,
             isActive: form.isActive,
           }
         : {
@@ -253,7 +282,7 @@ function UserDialog({
             email: form.email,
             fullName: form.fullName,
             role: form.role,
-            usine: roleGlobal ? null : form.usine,
+            usines: rattachement,
             password: form.password,
           };
       const res = await fetch(modification ? `/api/users/${user!.id}` : "/api/users", {
@@ -331,22 +360,55 @@ function UserDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="u-usine">Usine {roleGlobal ? "" : "*"}</Label>
-              <select
-                id="u-usine"
-                value={roleGlobal ? "" : form.usine}
-                disabled={roleGlobal || Boolean(scope)}
-                onChange={(e) => set("usine", e.target.value)}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="">{roleGlobal ? "Toutes les usines" : "— Sélectionner —"}</option>
-                {unites.map((u) => (
-                  <option key={u} value={u}>{u}</option>
-                ))}
-              </select>
-              {roleGlobal && (
-                <p className="text-xs text-muted-foreground">
+              <Label>Usines {roleGlobal ? "" : "*"}</Label>
+
+              {roleGlobal ? (
+                <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                   Ce rôle donne accès à toutes les usines.
+                </p>
+              ) : (
+                <div className="space-y-1 rounded-md border p-2">
+                  {peutToutAccorder && (
+                    <label className="flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-accent">
+                      <input
+                        type="checkbox"
+                        checked={form.toutes}
+                        onChange={(e) => set("toutes", e.target.checked)}
+                        className="h-4 w-4 rounded border-input"
+                      />
+                      <span className="font-medium">Toutes les usines</span>
+                    </label>
+                  )}
+                  <div
+                    className={cn(
+                      "max-h-40 space-y-0.5 overflow-y-auto",
+                      form.toutes && "pointer-events-none opacity-50",
+                    )}
+                  >
+                    {unites.map((u) => (
+                      <label
+                        key={u}
+                        className="flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-accent"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.toutes || form.usines.includes(u)}
+                          disabled={form.toutes}
+                          onChange={() => basculerUsine(u)}
+                          className="h-4 w-4 rounded border-input"
+                        />
+                        {u}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!roleGlobal && (
+                <p className="text-xs text-muted-foreground">
+                  {form.toutes
+                    ? "Y compris les usines créées ultérieurement."
+                    : `${form.usines.length} usine(s) sélectionnée(s)`}
                 </p>
               )}
             </div>

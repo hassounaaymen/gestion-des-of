@@ -57,11 +57,12 @@ export function OrderActions({
       </Button>,
     );
   }
+  // Approbation finale : réservée au directeur d'usine (voir `order:close`)
   if (status === "QUALITY_VALIDATED" && perms.close) {
     actions.push(
       <Button key="cl" onClick={() => act("close", "cl")} disabled={!!loading}>
         {loading === "cl" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
-        Clôturer l'OF
+        Approuver et clôturer l'OF
       </Button>,
     );
   }
